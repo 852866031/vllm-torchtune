@@ -1,0 +1,6 @@
+=== Throughput (post-warmup) ===
+steps kept           : 138
+window               : 30.08 s (from 30.06s to 60.15s of 60s cap)
+tokens processed     : 31407
+avg tokens / batch   : 227.6
+tokens / second      : 1044.0

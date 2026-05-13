@@ -1,0 +1,103 @@
+output_dir: ./out
+
+# Llama-3.1-8B already lives in the HF cache at:
+#   /home/jiaxuan_chen/scratch/models--meta-llama--Meta-Llama-3.1-8B
+# The current snapshot hash is d04e592bb4f6aa9cfee91e2e20afa771667e1d4b.
+# If a future `huggingface-cli download` lands on a different snapshot,
+# update the two paths below to match.
+
+# ---- Tokenizer (Llama 3.1 ships tokenizer.model under original/) ----
+tokenizer:
+  _component_: torchtune.models.llama3.llama3_tokenizer
+  path: /home/jiaxuan_chen/scratch/models--meta-llama--Meta-Llama-3.1-8B/snapshots/d04e592bb4f6aa9cfee91e2e20afa771667e1d4b/original/tokenizer.model
+  max_seq_len: 1024
+
+# ---- Model with LoRA adapter ----
+# Matches ./llama3-toy-lora-ft/adapter_config.json:
+#   r=16, lora_alpha=32, lora_dropout=0.05, bias=none,
+#   target_modules = [q_proj, k_proj, v_proj, o_proj]
+# torchtune names o_proj as `output_proj`.
+model:
+  _component_: torchtune.models.llama3_1.lora_llama3_1_8b
+  lora_attn_modules: ["q_proj", "k_proj", "v_proj", "output_proj"]
+  apply_lora_to_mlp: False
+  apply_lora_to_output: False
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+
+# ---- Base checkpoint (HF safetensors, already on disk) ----
+checkpointer:
+  _component_: torchtune.training.FullModelHFCheckpointer
+  checkpoint_dir: /home/jiaxuan_chen/scratch/models--meta-llama--Meta-Llama-3.1-8B/snapshots/d04e592bb4f6aa9cfee91e2e20afa771667e1d4b
+  checkpoint_files: [
+    model-00001-of-00004.safetensors,
+    model-00002-of-00004.safetensors,
+    model-00003-of-00004.safetensors,
+    model-00004-of-00004.safetensors,
+  ]
+  recipe_checkpoint: null
+  output_dir: ${output_dir}
+  model_type: LLAMA3
+resume_from_checkpoint: False
+save_adapter_weights_only: True
+
+# ---- Dataset (alpaca_1000_p95.txt -> alpaca_1000_p95.json) ----
+dataset:
+  _component_: torchtune.datasets.alpaca_dataset
+  source: json
+  data_files: ./alpaca_1000_p95.json
+  split: train
+  train_on_input: False
+  packed: False
+seed: 0
+shuffle: True
+batch_size: 4
+
+# ---- Optimizer / scheduler / loss ----
+optimizer:
+  _component_: torch.optim.AdamW
+  fused: True
+  lr: 0.000005          # 5e-6
+  weight_decay: 0.01
+lr_scheduler:
+  # lr_factory.exponential_lr wraps torch.optim.lr_scheduler.ExponentialLR so
+  # torchtune can pass num_training_steps to it without crashing.
+  _component_: lr_factory.exponential_lr
+  gamma: 0.9
+loss:
+  _component_: torchtune.modules.loss.CEWithChunkedOutputLoss
+
+# ---- Training loop ----
+epochs: 1000
+max_steps_per_epoch: 100000      # run_timed.py stops on wall-clock time
+gradient_accumulation_steps: 1
+clip_grad_norm: null
+compile: False
+optimizer_in_bwd: False
+device: cuda
+dtype: bf16
+enable_activation_checkpointing: False
+enable_activation_offloading: False
+
+# ---- Logging ----
+metric_logger:
+  _component_: torchtune.training.metric_logging.DiskLogger
+  log_dir: ${output_dir}/logs
+log_every_n_steps: 1
+log_peak_memory_stats: False
+
+profiler:
+  _component_: torchtune.training.setup_torch_profiler
+  enabled: False
+  output_dir: ${output_dir}/profiling_outputs
+  cpu: True
+  cuda: True
+  profile_memory: False
+  with_stack: False
+  record_shapes: True
+  with_flops: False
+  wait_steps: 5
+  warmup_steps: 3
+  active_steps: 2
+  num_cycles: 1

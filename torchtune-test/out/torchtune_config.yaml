@@ -1,0 +1,79 @@
+output_dir: ./out
+tokenizer:
+  _component_: torchtune.models.llama3.llama3_tokenizer
+  path: /home/jiaxuan_chen/scratch/models--meta-llama--Meta-Llama-3.1-8B/snapshots/d04e592bb4f6aa9cfee91e2e20afa771667e1d4b/original/tokenizer.model
+  max_seq_len: 1024
+model:
+  _component_: torchtune.models.llama3_1.lora_llama3_1_8b
+  lora_attn_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - output_proj
+  apply_lora_to_mlp: false
+  apply_lora_to_output: false
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+checkpointer:
+  _component_: torchtune.training.FullModelHFCheckpointer
+  checkpoint_dir: /home/jiaxuan_chen/scratch/models--meta-llama--Meta-Llama-3.1-8B/snapshots/d04e592bb4f6aa9cfee91e2e20afa771667e1d4b
+  checkpoint_files:
+  - model-00001-of-00004.safetensors
+  - model-00002-of-00004.safetensors
+  - model-00003-of-00004.safetensors
+  - model-00004-of-00004.safetensors
+  recipe_checkpoint: null
+  output_dir: ${output_dir}
+  model_type: LLAMA3
+resume_from_checkpoint: false
+save_adapter_weights_only: true
+dataset:
+  _component_: torchtune.datasets.alpaca_dataset
+  source: json
+  data_files: ./alpaca_1000_p95.json
+  split: train
+  train_on_input: false
+  packed: false
+seed: 0
+shuffle: true
+batch_size: 4
+optimizer:
+  _component_: torch.optim.AdamW
+  fused: true
+  lr: 5.0e-06
+  weight_decay: 0.01
+lr_scheduler:
+  _component_: lr_factory.exponential_lr
+  gamma: 0.9
+loss:
+  _component_: torchtune.modules.loss.CEWithChunkedOutputLoss
+epochs: 1000
+max_steps_per_epoch: 100000
+gradient_accumulation_steps: 1
+clip_grad_norm: null
+compile: false
+optimizer_in_bwd: false
+device: cuda
+dtype: bf16
+enable_activation_checkpointing: false
+enable_activation_offloading: false
+metric_logger:
+  _component_: torchtune.training.metric_logging.DiskLogger
+  log_dir: ${output_dir}/logs
+log_every_n_steps: 1
+log_peak_memory_stats: false
+profiler:
+  _component_: torchtune.training.setup_torch_profiler
+  enabled: false
+  output_dir: ${output_dir}/profiling_outputs
+  cpu: true
+  cuda: true
+  profile_memory: false
+  with_stack: false
+  record_shapes: true
+  with_flops: false
+  wait_steps: 5
+  warmup_steps: 3
+  active_steps: 2
+  num_cycles: 1
